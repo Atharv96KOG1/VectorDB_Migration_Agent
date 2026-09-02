@@ -1,0 +1,88 @@
+{
+    "name": "VectorDB_Migration_Agent",
+    "version": "1.0.0",
+    "description": "Universal Vector DB Migration Agent: benchmark-gated, retrieval-preserving migration between vector databases (Pinecone <-> Qdrant in this build).",
+    "config": {
+        "triggers": [
+            {
+                "name": "migration_id",
+                "type": "str",
+                "required": true,
+                "description": "Unique id for this migration run — also the checkpoint/resume key.",
+                "friendly_name": "Migration ID"
+            },
+            {
+                "name": "source_provider",
+                "type": "str",
+                "required": true,
+                "description": "Source vector database provider. Type exactly: pinecone or qdrant",
+                "friendly_name": "Source Provider"
+            },
+            {
+                "name": "source_resource",
+                "type": "str",
+                "required": true,
+                "description": "Source index/collection name.",
+                "friendly_name": "Source Resource"
+            },
+            {
+                "name": "source_credential_ref",
+                "type": "str",
+                "required": true,
+                "description": "Your real Pinecone/Qdrant API key, pasted directly (works immediately, no setup). Also accepts an environment variable name (e.g. PINECONE_API_KEY) if the worker already has one set.",
+                "friendly_name": "Source Credential Ref"
+            },
+            {
+                "name": "source_endpoint_ref",
+                "type": "str",
+                "required": false,
+                "description": "Optional endpoint/host — a literal URL, 'memory' for a local Qdrant instance, or an environment variable name if the worker already has one set.",
+                "friendly_name": "Source Endpoint Ref"
+            },
+            {
+                "name": "target_provider",
+                "type": "str",
+                "required": true,
+                "description": "Target vector database provider. Type exactly: pinecone or qdrant",
+                "friendly_name": "Target Provider"
+            },
+            {
+                "name": "target_resource",
+                "type": "str",
+                "required": true,
+                "description": "Target index/collection name.",
+                "friendly_name": "Target Resource"
+            },
+            {
+                "name": "target_credential_ref",
+                "type": "str",
+                "required": true,
+                "description": "Your real target provider API key, pasted directly (works immediately, no setup). Also accepts an environment variable name (e.g. QDRANT_API_KEY) if the worker already has one set.",
+                "friendly_name": "Target Credential Ref"
+            },
+            {
+                "name": "target_endpoint_ref",
+                "type": "str",
+                "required": false,
+                "description": "Optional endpoint/host for the target provider — a literal URL, or an environment variable name if the worker already has one set.",
+                "friendly_name": "Target Endpoint Ref"
+            },
+            {
+                "name": "id_collision_policy",
+                "type": "str",
+                "required": false,
+                "default": "fail",
+                "description": "What to do when a source id already exists in the target. Type exactly: fail, overwrite, skip, rename, or prefix",
+                "friendly_name": "ID Collision Policy"
+            },
+            {
+                "name": "resume",
+                "type": "boolean",
+                "required": false,
+                "default": false,
+                "description": "Resume a previously terminated run with the same migration_id from its last checkpointed state.",
+                "friendly_name": "Resume"
+            }
+        ]
+    }
+}
