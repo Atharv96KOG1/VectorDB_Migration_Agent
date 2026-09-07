@@ -1,6 +1,6 @@
 [project]
 name = "VectorDB_Migration_Agent"
-version = "0.0.12"
+version = "0.0.16"
 description = "Universal Vector DB Migration Agent: benchmark-gated, retrieval-preserving migration between vector databases (Pinecone <-> Qdrant in this build)."
 authors = [{ name = "Calfus Inc.", email = "support@calfus.com" }]
 readme = "README.md"
