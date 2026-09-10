@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1650 420" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#dc2626"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1650" height="420" fill="#ffffff"/>
+
+  <text x="825" y="30" text-anchor="middle" font-size="20" font-weight="700" fill="#0f172a">Migration workflow — state machine</text>
+  <text x="825" y="49" text-anchor="middle" font-size="12.5" fill="#64748b">One state per box below runs as a Temporal workflow step; FAILED is reachable from any of them</text>
+
+  <!-- Row 1: INIT CONNECT DISCOVER NORMALIZE COMPARE PLAN DRY_RUN -->
+  <g font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">
+    <rect x="20"   y="80" width="210" height="56" rx="10" fill="#334155"/>
+    <text x="125" y="113">INIT</text>
+
+    <rect x="250"  y="80" width="210" height="56" rx="10" fill="#334155"/>
+    <text x="355" y="113">CONNECT</text>
+
+    <rect x="480"  y="80" width="210" height="56" rx="10" fill="#334155"/>
+    <text x="585" y="113">DISCOVER</text>
+
+    <rect x="710"  y="80" width="210" height="56" rx="10" fill="#334155"/>
+    <text x="815" y="113">NORMALIZE</text>
+
+    <rect x="940"  y="80" width="210" height="56" rx="10" fill="#334155"/>
+    <text x="1045" y="113">COMPARE</text>
+
+    <rect x="1170" y="80" width="210" height="56" rx="10" fill="#334155"/>
+    <text x="1275" y="113">PLAN</text>
+
+    <rect x="1400" y="80" width="230" height="56" rx="10" fill="#334155"/>
+    <text x="1515" y="113">DRY_RUN</text>
+  </g>
+
+  <!-- row1 forward arrows -->
+  <g stroke="#64748b" stroke-width="2" marker-end="url(#arrow)">
+    <line x1="230"  y1="108" x2="248"  y2="108"/>
+    <line x1="460"  y1="108" x2="478"  y2="108"/>
+    <line x1="690"  y1="108" x2="708"  y2="108"/>
+    <line x1="920"  y1="108" x2="938"  y2="108"/>
+    <line x1="1150" y1="108" x2="1168" y2="108"/>
+    <line x1="1380" y1="108" x2="1398" y2="108"/>
+  </g>
+
+  <!-- wrap arrow DRY_RUN -> BENCHMARK -->
+  <path d="M 1515 136 L 1515 175 L 1515 175" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Row 2: BENCHMARK APPROVAL MIGRATE CDC_SYNC VERIFY CUTOVER COMPLETE -->
+  <g font-size="13" font-weight="700" text-anchor="middle">
+    <rect x="1400" y="195" width="230" height="56" rx="10" fill="#1d4ed8"/>
+    <text x="1515" y="220" fill="#ffffff">BENCHMARK</text>
+    <text x="1515" y="238" font-size="10" font-weight="500" fill="#dbeafe">quality-gated selection</text>
+
+    <rect x="1170" y="195" width="210" height="56" rx="10" fill="#475569" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5,4"/>
+    <text x="1275" y="220" fill="#ffffff">APPROVAL</text>
+    <text x="1275" y="238" font-size="10" font-weight="500" fill="#e2e8f0">audit only, no human gate</text>
+
+    <rect x="940"  y="195" width="210" height="56" rx="10" fill="#334155"/>
+    <text x="1045" y="228" fill="#ffffff">MIGRATE</text>
+
+    <rect x="710"  y="195" width="210" height="56" rx="10" fill="#475569" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5,4"/>
+    <text x="815" y="220" fill="#ffffff">CDC_SYNC</text>
+    <text x="815" y="238" font-size="10" font-weight="500" fill="#e2e8f0">no-op in this build</text>
+
+    <rect x="480"  y="195" width="210" height="56" rx="10" fill="#334155"/>
+    <text x="585" y="228" fill="#ffffff">VERIFY</text>
+
+    <rect x="250"  y="195" width="210" height="56" rx="10" fill="#334155"/>
+    <text x="355" y="228" fill="#ffffff">CUTOVER</text>
+
+    <rect x="20"   y="195" width="210" height="56" rx="10" fill="#15803d"/>
+    <text x="125" y="228" fill="#ffffff">COMPLETE</text>
+  </g>
+
+  <!-- row2 backward (right-to-left) arrows -->
+  <g stroke="#64748b" stroke-width="2" marker-end="url(#arrow)">
+    <line x1="1398" y1="223" x2="1382" y2="223"/>
+    <line x1="1168" y1="223" x2="1152" y2="223"/>
+    <line x1="938"  y1="223" x2="922"  y2="223"/>
+    <line x1="708"  y1="223" x2="692"  y2="223"/>
+    <line x1="478"  y1="223" x2="462"  y2="223"/>
+    <line x1="248"  y1="223" x2="232"  y2="223"/>
+  </g>
+
+  <!-- FAILED -->
+  <g>
+    <rect x="20" y="320" width="1610" height="56" rx="10" fill="#ffffff" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="6,4"/>
+    <text x="825" y="345" text-anchor="middle" font-size="13" font-weight="700" fill="#dc2626">FAILED</text>
+    <text x="825" y="363" text-anchor="middle" font-size="11" fill="#7f1d1d">reachable from any state above — records the reason and stops; re-running is a new execution with resume: true, not an automatic retry loop</text>
+    <line x1="1045" y1="251" x2="1045" y2="320" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4,4" marker-end="url(#arrowRed)"/>
+  </g>
+</svg>
