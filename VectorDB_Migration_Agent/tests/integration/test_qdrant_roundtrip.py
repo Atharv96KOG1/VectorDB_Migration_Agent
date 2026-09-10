@@ -172,9 +172,9 @@ async def test_direct_copy_end_to_end_recall_is_near_perfect(tmp_path, qdrant_pa
     assert report["quality_gate_passed"] is True
     # 2026-09-01: report_ref/provenance_ref are local filesystem paths, invisible to an
     # operator on a managed/hosted worker (no artifact/download API in aetherion_sdk) —
-    # the actual provenance content must also come back inline, not just as a path.
-    assert report["provenance"]["migration_id"] == migration_id
-    assert report["provenance"]["quality_gate_passed"] is True
+    # the full report content must also come back inline, not just as a path.
+    assert report["report"]["provenance"]["migration_id"] == migration_id
+    assert report["report"]["provenance"]["quality_gate_passed"] is True
 
     checkpoint = load_checkpoint(migration_id)
     assert checkpoint["migrate"]["vectors_written"] == N_VECTORS

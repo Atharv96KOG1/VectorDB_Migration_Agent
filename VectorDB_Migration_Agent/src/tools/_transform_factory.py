@@ -111,3 +111,39 @@ def build_transformer(
             api_key=reembed_api_key, model=reembed_model, dimensions=reembed_dimensions
         )
     raise ValueError(f"unknown strategy: {strategy}")
+
+
+# Strategies whose fitted_params holds a full weight matrix/array meant only for the JSON
+# checkpoint's MIGRATE-time reload path (core/transformations/*.py's from_fitted) — never
+# for a human/UI-facing report. Confirmed live, 2026-09-02: embedding one of these
+# directly in the workflow result (as tools/report_tools.py once did) caused real,
+# visible lag rendering the platform's Result panel — a 1024x1536 matrix alone is over
+# 1.5 million floats as JSON text.
+_RECONSTRUCTABLE_FOR_PROVENANCE = {
+    TransformStrategy.PCA: PCATransformer,
+    TransformStrategy.RANDOM_PROJECTION: RandomProjectionTransformer,
+    TransformStrategy.RIDGE_MAPPING: RidgeMappingTransformer,
+    TransformStrategy.PROCRUSTES_MAPPING: OrthogonalProcrustesTransformer,
+    TransformStrategy.PROCRUSTES_DIAG_MAPPING: ProcrustesDiagMappingTransformer,
+    TransformStrategy.LOW_RANK_AFFINE_MAPPING: LowRankAffineMappingTransformer,
+}
+
+
+def provenance_parameters_from_fitted(
+    strategy: TransformStrategy,
+    fitted_params: dict,
+    target_dimension: int,
+    reembed_model: str = "text-embedding-3-small",
+) -> dict:
+    """Small, report-safe summary of a fitted transform — reconstructs just enough of the
+    transformer to call its own `.provenance()['parameters']`, never returns the raw
+    fitted_params dict itself (see _RECONSTRUCTABLE_FOR_PROVENANCE's docstring). Strategies
+    with no meaningful fitted parameters (direct_copy, mrl, stubs) get an empty dict."""
+    cls = _RECONSTRUCTABLE_FOR_PROVENANCE.get(strategy)
+    if cls is None:
+        return {}
+    if cls in (PCATransformer, RandomProjectionTransformer):
+        transformer = cls.from_fitted(fitted_params, target_dimension)
+    else:
+        transformer = cls.from_fitted(fitted_params, model=reembed_model)
+    return transformer.provenance()["parameters"]

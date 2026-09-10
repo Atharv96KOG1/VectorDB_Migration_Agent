@@ -1,6 +1,6 @@
 [project]
 name = "VectorDB_Migration_Agent"
-version = "0.0.16"
+version = "0.0.38"
 description = "Universal Vector DB Migration Agent: benchmark-gated, retrieval-preserving migration between vector databases (Pinecone <-> Qdrant in this build)."
 authors = [{ name = "Calfus Inc.", email = "support@calfus.com" }]
 readme = "README.md"
@@ -8,7 +8,7 @@ requires-python = ">=3.12.10,<3.14"
 
 
 dependencies = [
-    "aetherion-sdk @ https://sdk.sbox.aetherion.io/Darwin/aetherion_sdk-0.0.55-cp312-cp312-macosx_15_0_arm64.whl",
+    "aetherion-sdk @ https://sdk.sbox.aetherion.io/Darwin/aetherion_sdk-0.0.77-cp312-cp312-macosx_26_0_arm64.whl",
     "numpy>=2.0",
     "scipy>=1.14",
     "scikit-learn>=1.5",

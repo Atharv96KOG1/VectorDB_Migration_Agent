@@ -131,8 +131,7 @@ class WorkflowResult(BaseModel):
     report_ref: str | None = None
     quality_gate_passed: bool | None = None
     confidence_score: float | None = None
-    provenance: dict | None = None
-    """The actual provenance record content, inline — not just provenance_ref's local
-    path. A managed/hosted worker's filesystem is invisible to the operator (no
-    artifact/download API in aetherion_sdk), so a path alone is useless there; this small,
-    fully JSON-safe record is returned directly instead."""
+    report: dict | None = None
+    """The full audit report content, inline — same rationale as provenance above. There
+    is no download/preview mechanism in aetherion_sdk for report_ref's local path, so the
+    content itself is returned directly so it's visible in the platform's Result panel."""

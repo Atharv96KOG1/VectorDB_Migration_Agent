@@ -21,6 +21,7 @@ from core.models.migration_plan import MigrationPlan, TransformStrategy
 from core.models.provenance import ProvenanceRecord, TransformationProvenance, Vec2VecProvenance
 from core.optimizer.scorer import compute_confidence_score
 from core.security.redaction import redact
+from tools._transform_factory import provenance_parameters_from_fitted
 
 
 def _find_benchmark(checkpoint: dict, benchmark_id: str | None) -> dict | None:
@@ -80,10 +81,16 @@ async def write_provenance_and_report(migration_id: str) -> dict:
         strategy=plan.selected_strategy.value,
         input_dimension=field.source.dimension,
         output_dimension=field.target.dimension,
-        parameters=(
-            fitted.get("params", {})
-            if plan.selected_strategy != TransformStrategy.DIRECT_COPY
-            else {}
+        # A small, report-safe summary — never fitted["params"] itself, which for
+        # pca/random_projection/ridge_mapping/procrustes*/low_rank_affine_mapping holds
+        # the full weight matrix (a 1024x1536 matrix alone is 1.5M+ floats as JSON text).
+        # Real bug found live, 2026-09-02: embedding that raw matrix inline in the
+        # workflow result caused visible lag rendering the platform's Result panel.
+        parameters=provenance_parameters_from_fitted(
+            plan.selected_strategy,
+            fitted.get("params", {}),
+            field.target.dimension,
+            reembed_model=req.get("reembed_model", "text-embedding-3-small"),
         ),
         artifact_id=benchmark["benchmark_id"],
         source_semantic_space_id=field.embedding.semantic_space_id,
@@ -117,13 +124,23 @@ async def write_provenance_and_report(migration_id: str) -> dict:
     )
 
     redacted = redact(checkpoint)
+    migrate_summary = redacted.get("migrate")
+    if migrate_summary is not None:
+        # written_ids is one string id per vector written — unbounded for a real
+        # migration (thousands+ entries). A count is all an inline result needs; the
+        # full list already lives in the on-disk checkpoint for anyone who needs it.
+        migrate_summary = {
+            **migrate_summary,
+            "vectors_written_count": len(migrate_summary.get("written_ids", [])),
+        }
+        migrate_summary.pop("written_ids", None)
     report = {
         "migration_id": migration_id,
         "history": redacted.get("history"),
         "compatibility": redacted.get("compatibility"),
         "plan": redacted.get("plan"),
         "benchmark_results": redacted.get("benchmark_results"),
-        "migrate": redacted.get("migrate"),
+        "migrate": migrate_summary,
         "validation": redacted.get("validation"),
         "provenance": record.model_dump(mode="json"),
     }
@@ -149,9 +166,9 @@ async def write_provenance_and_report(migration_id: str) -> dict:
         "confidence_score": record.confidence_score,
         # *_ref are local filesystem paths on whatever worker ran this tool — invisible to
         # the operator on a managed/hosted worker (confirmed: aetherion_sdk has no
-        # artifact/blob/download API at all, checked every .pyi stub, 2026-09-01). The
-        # provenance record itself is small and fully JSON-safe, so it's returned inline
-        # here too — real content the operator can actually see, not just an inaccessible
-        # path.
-        "provenance": record.model_dump(mode="json"),
+        # artifact/blob/download API at all, checked every .pyi stub, 2026-09-01). The full
+        # report content is small and fully JSON-safe (written_ids trimmed to a count), so
+        # it's returned inline here too — real content the operator can actually see and
+        # preview in the platform's own Result panel, not just an inaccessible path.
+        "report": report,
     }

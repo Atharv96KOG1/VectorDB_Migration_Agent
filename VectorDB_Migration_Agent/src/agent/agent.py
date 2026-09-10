@@ -153,7 +153,7 @@ async def VectorDB_Migration_Agent(payload: dict) -> dict:
             report_ref=report["report_ref"],
             quality_gate_passed=report["quality_gate_passed"],
             confidence_score=report["confidence_score"],
-            provenance=report["provenance"],
+            report=report["report"],
         )
 
     except Exception as exc:  # noqa: BLE001 — top-level workflow guard, routes to FAILED
