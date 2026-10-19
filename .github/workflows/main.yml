@@ -1,0 +1,35 @@
+name: Code Quality Analysis
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  code-quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Run Designite analysis for the old and new revisions here.
+      # Ensure both output directories are available before continuing.
+
+      - name: Designite Incremental Code Quality Analysis
+        uses: DesigniteTools/designite-incremental-analysis@v2.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          designite-output-old: designite-output-old
+          designite-output-new: designite-output-new
+          repo-name: ${{ github.repository }}
+          tool-name: 'dj'
