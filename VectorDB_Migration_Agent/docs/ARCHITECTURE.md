@@ -533,11 +533,15 @@ The fourth spec's remaining concepts, also deliberately not built:
 - **MTEB/BEIR CI regression suite** (V3 §7) — needs public benchmark datasets and network
   access; a standing CI concern independent of any one migration, not part of the agent
   itself.
-- **Adapter conformance certification kit** (V3 §9) — only useful once third-party
-  adapters beyond Pinecone/Qdrant exist.
-- **Wrapping `vector-io`/VDF** (V3 §6) — V2's MVP scope is Pinecone↔Qdrant only; the
-  hand-rolled adapters were kept specifically for the fine-grained capability
-  introspection V3 §6 itself says `vector-io` doesn't expose.
+- **Adapter conformance certification kit** (V3 §9) — its stated precondition ("once
+  adapters beyond Pinecone/Qdrant exist") is now true (see "Multi-provider expansion"
+  below), but a formal certification kit itself — a shared test suite every adapter must
+  pass, independent of each adapter's own hand-written tests — wasn't built as part of
+  that expansion; still a legitimate, bounded follow-up.
+- **Wrapping `vector-io`/VDF** (V3 §6) — V2's original MVP scope was Pinecone↔Qdrant
+  only; the hand-rolled-adapter approach was kept when generalizing to five more
+  providers for the same reason: fine-grained capability introspection V3 §6 itself says
+  `vector-io` doesn't expose.
 - **Sparse vectors, named vectors, quantization-aware indexing, real CDC listeners** — V2
   §48 places these at MVP-4, after the MVP-1/2 scope this build targets.
 - **LLM-based synthetic query generation** (V2 §25) — `core/validation/engine.py:resolve_validation_mode`
@@ -573,3 +577,124 @@ The fourth spec's remaining concepts, also deliberately not built:
   an `asyncio.Lock` (see "Infra hardening pass") — correct, but it means candidate
   evaluations against a Qdrant target are only as parallel as that lock allows, not fully
   concurrent the way Pinecone-target (brute-force) candidates are.
+
+## Multi-provider expansion (2026-09-11)
+
+The Pinecone↔Qdrant scope described above (and the still-accurate "adapters beyond
+Pinecone/Qdrant" deferrals earlier in this doc) has been superseded: five more adapters
+now exist — Milvus, Chroma, Weaviate, FAISS, Vespa — all against the same
+`VectorDBAdapter` contract, wired into the same one dispatch point
+(`tools/_shared.py:build_adapter`). No other tool changed; `connection_tools.py`,
+`discovery_tools.py`, `execution_tools.py`, and `validation_tools.py` only ever called
+the ABC to begin with, confirmed by reading them before adding anything.
+
+**Live-verification status, stated plainly**: Milvus (against a real Zilliz Cloud
+cluster), Chroma (Chroma Cloud), and Weaviate (Weaviate Cloud) were each connected,
+upserted to, queried, scanned, and deleted from for real, then cleaned up — not just
+tested against a mock or an embedded/local mode. FAISS has no server or credentials at
+all, so its real local-file round-trip tests (`tests/unit/test_faiss_adapter.py`) are as
+live-verified as this provider can ever be. Vespa's adapter is a complete, real
+implementation (hand-rolled `httpx` REST against the Document API v1, same architectural
+choice `pinecone_adapter.py` already made) proven via `httpx.MockTransport` request/
+response-shape tests, matching exactly how Pinecone's own adapter was first verified in
+this codebase before a live account was available — Vespa is not yet exercised against a
+real instance.
+
+**A real bug the Weaviate live test caught, not code review**: `near_vector`/`insert`
+initially wrapped the query vector as `{"default": vector}` whenever `get_resource_info`
+resolved a named-vector config — Weaviate's own `describe_collection`-equivalent really
+does name a single, unnamed vector config `"default"`, but passing that name explicitly
+to `near_vector` as a `target_vector` fails outright ("received: {'default': [...]}"),
+confirmed live. The fix: a single-vector collection's one config entry (whatever it's
+literally named) is never used for explicit targeting — only a genuinely multi-named-
+vector collection resolves and uses a real target name.  This is exactly the kind of gap
+`docs/ARCHITECTURE.md`'s own stated philosophy (verify live, don't trust docs/memory
+alone) exists to catch, and it did.
+
+**Design decisions carried into these five adapters** (fuller rationale in each file's
+own module docstring):
+- Every provider's native metric with no `Metric` enum equivalent (Weaviate `HAMMING`,
+  Vespa `angular`, Milvus `JACCARD`) maps to `Metric.UNKNOWN`, never guessed — the same
+  tri-state rule `core/compatibility/engine.py` already enforces for Pinecone/Qdrant.
+- Real-ANN ephemeral-collection benchmarking (`tools/benchmark_tools.py`) stays
+  Qdrant-target-only, unchanged — every new provider uses the same real, generic
+  brute-force benchmark path Pinecone-as-target already used. Extending real-ANN
+  benchmarking to the other providers is a legitimate future addition, not something
+  silently limited by this expansion.
+- FAISS and Vespa each needed a genuine design decision beyond "port the same pattern":
+  FAISS's local-file + JSON-sidecar id/payload store (`core/adapters/faiss_adapter.py`),
+  and Vespa's `"<namespace>/<document-type>"` resource-addressing convention plus a
+  configurable tensor field name, since Vespa has no simple index-name equivalent at all.
+- `IndexIDMap2.reconstruct_n()` was confirmed live to abort the whole Python process
+  (an uncaught C++ `FaissException`, not a catchable Python exception) when used on a
+  mapped FAISS index — `faiss_adapter.py` never calls it, only `reconstruct()` one real
+  id at a time, for exactly this reason.
+
+**A real, permanent capability gap the end-to-end proof surfaced, not a bug**: a first
+attempt at the required real end-to-end migration used Milvus (source) -> Chroma
+(target). `run_compatibility_check` correctly reported `dimension: unknown` and
+`direct_copy_possible: False` against the freshly-created, still-empty Chroma target,
+which then failed every candidate at BENCHMARK (no candidate could pass the quality
+gate). This is the tri-state system working exactly as designed, not a defect: neither
+Chroma nor Weaviate declares a vector dimension at collection-creation time the way
+Pinecone/Qdrant/Milvus/FAISS all do in their schema/index config — for those two, a
+dimension is only ever inferable empirically from a real stored vector
+(`get_resource_info` in both `chroma_adapter.py` and `weaviate_adapter.py` returns
+`dimension=None` for an empty collection, confirmed live for both). Since a fresh
+migration target is, definitionally, usually empty before the migration runs, this means
+Chroma and Weaviate cannot currently serve as a target whose dimension compatibility is
+verified at COMPARE time — a real, load-bearing limitation of this expansion, not
+something this build can silently paper over without guessing. The actual required
+end-to-end proof was run against Milvus (source, live Zilliz Cloud) -> FAISS (target,
+local, dimension declared at index-creation time) instead: real discovery, `COMPARE`
+correctly classified everything `exact`/`compatible`, `direct_copy` scored a real
+Recall@10 of 1.0 against a real ephemeral benchmark sample, 100/100 vectors migrated,
+golden-query `VERIFY` passed, and `write_provenance_and_report` recorded
+`quality_gate_passed=True` with `confidence_score=1.0` — the same standard of proof
+`tests/integration/test_qdrant_roundtrip.py` already sets, just run live instead of
+against local Qdrant stores on both sides.
+
+## Cost modeling: storage-based estimator (2026-10-13)
+
+`core/models/benchmark.py`'s `estimated_cost` field existed from the start but nothing
+ever set it, so `CandidateMetrics.cost` (`core/optimizer/scorer.py`) was always `0.0` for
+every candidate — `cost_weight` was a configurable knob that silently did nothing no
+matter what an operator set it to.
+
+`core/optimizer/cost.py` adds a real, if deliberately narrow, estimate: storage only
+(`dimension x dtype_size x vector_count x provider $/GB-month`), wired into
+`tools/benchmark_tools.py:_evaluate_candidate` using the candidate's *actual* transformed
+dimension (not just the planned `field.target.dimension`) and the source side's
+`approximate_count` (`ResourceInfo`, `core/adapters/base.py`) as the real-migration vector
+count — the DRY_RUN sample size would under-estimate cost by orders of magnitude for any
+real corpus.
+
+Deliberately NOT modeled: per-request query/write-op pricing. Most providers price that
+per-call in ways this system has no pre-migration visibility into; folding a guess at that
+into `estimated_cost` would produce a confidently-wrong number, the exact failure mode
+this project's tri-state capability model exists to prevent everywhere else. Treat the
+current number as a storage-only lower bound, not total cost of ownership.
+
+`CostEstimator` is a `Protocol`, and `PROVIDER_GB_MONTH_USD` is a module-level dict, not
+inlined arithmetic — specifically so a future query-cost estimator or a live
+pricing-API lookup is a new class behind the same `estimate()` call shape, not a rewrite
+of every caller. `StorageCostEstimator.estimate()` returns `None` — never `0.0` — when
+dimension, vector_count, or the provider's pricing entry is unknown, so a genuinely
+unestimable cost can never look identical to a confirmed-free one (e.g. FAISS's real
+`0.0`, a self-hosted library with no managed storage fee) to the optimizer.
+
+**This will go stale.** `PROVIDER_GB_MONTH_USD` is read off each provider's public pricing
+page, last verified 2026-10-13 — the same perishable-constant problem the Pinecone
+`X-Pinecone-Api-Version` pin already taught this project to expect (see "Infra hardening
+pass" above). Nothing currently re-checks it; refreshing it is a config change in one
+dict, not a code change, but it is a config change someone has to remember to make.
+
+**A pre-existing gap this surfaced, not introduced**: `planning_tools.py`'s
+`CandidateMetrics(cost=row.get("estimated_cost") or 0.0)` still treats a `None` estimate
+as `0.0` (free) when scoring. With `estimated_cost` now sometimes genuinely populated,
+an unknown-cost candidate sitting next to a known-cost one would unfairly look cheapest.
+In practice every candidate for one migration shares the same target provider/dimension/
+vector-count inputs, so they are either all estimable or all `None` together — the
+distortion is latent, not active, but it is a real follow-up (teach `score_candidates` to
+either exclude the cost axis or treat `None` as a tie, consistent with the tie-handling
+`normalize_metric` already does for measurement noise), not something this pass closes.

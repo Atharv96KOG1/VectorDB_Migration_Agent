@@ -1,6 +1,6 @@
 [project]
 name = "VectorDB_Migration_Agent"
-version = "0.0.38"
+version = "0.0.52"
 description = "Universal Vector DB Migration Agent: benchmark-gated, retrieval-preserving migration between vector databases (Pinecone <-> Qdrant in this build)."
 authors = [{ name = "Calfus Inc.", email = "support@calfus.com" }]
 readme = "README.md"
@@ -16,6 +16,10 @@ dependencies = [
     "httpx>=0.27",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
+    "pymilvus>=2.6",
+    "chromadb>=0.5",
+    "weaviate-client>=4.9",
+    "faiss-cpu>=1.9",
 ]
 
 [dependency-groups]
@@ -25,6 +29,7 @@ dev = [
     "pytest-cov==6.3.0",
     "ruff==0.12.12",
     "black==25.12.0",
+    "milvus-lite>=2.4",
 ]
 
 [build-system]

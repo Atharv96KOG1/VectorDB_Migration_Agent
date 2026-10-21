@@ -49,9 +49,22 @@ class VectorDBAdapter(ABC):
 
     provider: str
 
+    last_connect_error: str | None = None
+    """Set by validate_credentials() on a failed connection attempt, cleared on a
+    successful one. Every adapter's validate_credentials previously swallowed the real
+    exception into a bare `False` — confirmed live, 2026-10-05: a Qdrant source whose
+    cluster was actively resetting the TLS handshake (a paused/suspended cluster) showed
+    the operator nothing beyond `connected: false`, no way to tell network failure from
+    bad credentials from a wrong URL without a developer manually reproducing it outside
+    the platform. tools/connection_tools.py surfaces this in connect_and_validate's
+    per-side result."""
+
     @abstractmethod
     async def validate_credentials(self) -> bool:
-        """Cheap auth check (V2 §7: credential lookup -> authentication -> authorization)."""
+        """Cheap auth check (V2 §7: credential lookup -> authentication -> authorization).
+        On failure, must set self.last_connect_error to a real, human-readable reason
+        (e.g. f"{type(exc).__name__}: {exc}") before returning False — never swallow the
+        real exception into a bare boolean with no diagnostic trail."""
 
     @abstractmethod
     async def discover_capabilities(self) -> CapabilityReport:

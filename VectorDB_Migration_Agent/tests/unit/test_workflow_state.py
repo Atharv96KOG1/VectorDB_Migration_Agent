@@ -61,3 +61,37 @@ def test_defaults_when_omitted():
     assert dumped["reembed_dimensions"] is None
     assert dumped["source_embedding_config"] is None
     assert dumped["optimization_weights"] is None
+
+
+def test_leading_and_trailing_whitespace_is_stripped_from_free_text_fields():
+    """Regression test for a real bug found live, 2026-09-17: a target_resource value
+    of " Migrationdemo" (a leading space, from a copy-paste into the platform's free-text
+    trigger field) reached Milvus verbatim and was rejected outright ("Invalid collection
+    name: ... the first character of a collection name must be an underscore or letter").
+    source_provider/target_provider already got this treatment in
+    tools/_shared.py:build_adapter; every other free-text identifier field on this
+    trigger payload gets it here, once, at the one place they're all validated."""
+    request = MigrationRequest.model_validate(
+        {
+            "migration_id": "mig-1",
+            "source_provider": "pinecone",
+            "source_resource": "  src  ",
+            "source_credential_ref": " env://X ",
+            "source_endpoint_ref": " https://source.example.com ",
+            "target_provider": "qdrant",
+            "target_resource": " Migrationdemo",
+            "target_credential_ref": "env://Y\n",
+            "target_endpoint_ref": "\thttps://target.example.com",
+            "namespace": " tenant-1 ",
+            "document_field": " text ",
+        }
+    )
+    dumped = request.model_dump(mode="json")
+    assert dumped["source_resource"] == "src"
+    assert dumped["source_credential_ref"] == "env://X"
+    assert dumped["source_endpoint_ref"] == "https://source.example.com"
+    assert dumped["target_resource"] == "Migrationdemo"
+    assert dumped["target_credential_ref"] == "env://Y"
+    assert dumped["target_endpoint_ref"] == "https://target.example.com"
+    assert dumped["namespace"] == "tenant-1"
+    assert dumped["document_field"] == "text"
