@@ -1,25 +1,26 @@
-name: Generate Snake
+name: Generate contribution snake
 
 on:
   schedule:
     - cron: "0 0 * * *"
   workflow_dispatch:
-  push:
-    branches:
-      - main
 
-permissions:
-  contents: write
+concurrency:
+  group: contribution-snake
+  cancel-in-progress: false
 
 jobs:
   generate:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
 
     steps:
       - name: Generate contribution snake
         uses: Platane/snk@v3.5.0
         with:
-          github_user_name: ${{ github.repository_owner }}
+          github_user_name: Atharv96KOG1
           outputs: |
             dist/github-contribution-grid-snake.svg
             dist/github-contribution-grid-snake-dark.svg?palette=github-dark
