@@ -110,6 +110,17 @@ aetherion agent VectorDB_Migration_Agent '{
 aetherion publish
 ```
 
+### GitHub profile contribution snake
+
+The `Generate contribution snake` workflow runs daily or can be started from **Actions → Generate contribution snake → Run workflow**. It publishes light and dark SVGs to this repository's `output` branch. Ensure repository or organization Actions policy allows the workflow's `GITHUB_TOKEN` to write repository contents.
+
+To display the animation, add these lines to the README in your profile repository (`<your-username>/<your-username>`):
+
+```markdown
+![Contribution snake](https://raw.githubusercontent.com/Atharv96KOG1/VectorDB_Migration_Agent/output/github-contribution-grid-snake.svg#gh-light-mode-only)
+![Contribution snake](https://raw.githubusercontent.com/Atharv96KOG1/VectorDB_Migration_Agent/output/github-contribution-grid-snake-dark.svg#gh-dark-mode-only)
+```
+
 ## Testing
 
 ```bash
