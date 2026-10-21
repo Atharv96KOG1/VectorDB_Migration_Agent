@@ -1,0 +1,132 @@
+name: CI — Tests, Quality & Security
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+  schedule:
+    - cron: "23 3 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Python tests (3.12 / macOS ARM)
+    # The project declares an Aetherion SDK wheel built specifically for
+    # macOS 26 ARM64. Use a matching runner rather than failing Linux installs.
+    runs-on: macos-26
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: VectorDB_Migration_Agent
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12.10"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.0
+        with:
+          version: "0.13.4"
+
+      - name: Install project and development dependencies
+        run: uv sync --group dev
+
+      - name: Run unit tests with coverage
+        run: |
+          uv run pytest tests/unit -v \
+            --cov=src \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --junitxml=unit-test-results.xml
+
+      - name: Run local Qdrant integration tests
+        run: uv run pytest tests/integration -v --junitxml=integration-test-results.xml
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-and-coverage-reports
+          path: |
+            VectorDB_Migration_Agent/unit-test-results.xml
+            VectorDB_Migration_Agent/integration-test-results.xml
+            VectorDB_Migration_Agent/coverage.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Export public runtime dependencies for audit
+        run: |
+          uv export --no-dev --no-emit-project --no-hashes --format requirements-txt > /tmp/audit-requirements.txt
+          # This private, platform-specific wheel is not published to PyPI, so
+          # pip-audit cannot query its advisory database entry. Keep its other
+          # resolved public transitive dependencies in the audit.
+          grep -viE '^aetherion[-_]sdk[[:space:]]*@' /tmp/audit-requirements.txt > /tmp/audit-requirements-public.txt
+
+      - name: Audit public Python dependencies
+        run: uv tool run --from pip-audit pip-audit --requirement /tmp/audit-requirements-public.txt
+
+  code-quality:
+    name: Ruff lint and formatting
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: VectorDB_Migration_Agent
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install configured Ruff version
+        run: python -m pip install "ruff==0.12.12"
+
+      - name: Lint
+        run: ruff check src tests scripts
+
+      - name: Check formatting
+        run: ruff format --check src tests scripts
+
+  semgrep:
+    name: Semgrep SAST
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container:
+      image: semgrep/semgrep
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Scan for high-severity static-analysis findings
+        run: semgrep scan --config auto --severity ERROR --error VectorDB_Migration_Agent
+
+  secret-scan:
+    name: Gitleaks secret scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Scan for leaked secrets
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
