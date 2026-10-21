@@ -7,6 +7,7 @@ on:
     branches: [main, develop]
   workflow_dispatch:
   schedule:
+    # Weekly security/dependency re-check; GitHub Actions cron is UTC.
     - cron: "23 3 * * 1"
 
 permissions:
@@ -19,26 +20,26 @@ concurrency:
 jobs:
   tests:
     name: Python tests (3.12 / macOS ARM)
-    # The project declares an Aetherion SDK wheel built specifically for
-    # macOS 26 ARM64. Use a matching runner rather than failing Linux installs.
+    # The Aetherion SDK dependency is currently a macOS 26 ARM64-only wheel.
     runs-on: macos-26
     timeout-minutes: 30
     defaults:
       run:
         working-directory: VectorDB_Migration_Agent
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.12.10"
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v10.3.0
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: "0.13.4"
+          enable-cache: true
 
       - name: Install project and development dependencies
         run: uv sync --group dev
@@ -51,12 +52,24 @@ jobs:
             --cov-report=xml:coverage.xml \
             --junitxml=unit-test-results.xml
 
-      - name: Run local Qdrant integration tests
+      - name: Run Qdrant integration tests
         run: uv run pytest tests/integration -v --junitxml=integration-test-results.xml
 
-      - name: Upload test reports
+      - name: Export public runtime dependencies for audit
+        id: export-dependencies
         if: always()
-        uses: actions/upload-artifact@v6
+        run: |
+          uv export --no-dev --no-emit-project --no-hashes --format requirements-txt > /tmp/audit-requirements.txt
+          # The Aetherion SDK wheel is private and not indexed by pip-audit.
+          grep -viE '^aetherion[-_]sdk[[:space:]]*@' /tmp/audit-requirements.txt > /tmp/audit-requirements-public.txt
+
+      - name: Audit public Python dependencies
+        if: always() && steps.export-dependencies.outcome == 'success'
+        run: uv tool run --from pip-audit pip-audit --requirement /tmp/audit-requirements-public.txt
+
+      - name: Upload test and coverage reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: test-and-coverage-reports
           path: |
@@ -66,17 +79,6 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: Export public runtime dependencies for audit
-        run: |
-          uv export --no-dev --no-emit-project --no-hashes --format requirements-txt > /tmp/audit-requirements.txt
-          # This private, platform-specific wheel is not published to PyPI, so
-          # pip-audit cannot query its advisory database entry. Keep its other
-          # resolved public transitive dependencies in the audit.
-          grep -viE '^aetherion[-_]sdk[[:space:]]*@' /tmp/audit-requirements.txt > /tmp/audit-requirements-public.txt
-
-      - name: Audit public Python dependencies
-        run: uv tool run --from pip-audit pip-audit --requirement /tmp/audit-requirements-public.txt
-
   code-quality:
     name: Ruff lint and formatting
     runs-on: ubuntu-latest
@@ -85,21 +87,23 @@ jobs:
       run:
         working-directory: VectorDB_Migration_Agent
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.12"
 
-      - name: Install configured Ruff version
+      - name: Install pinned Ruff
         run: python -m pip install "ruff==0.12.12"
 
-      - name: Lint
+      - name: Lint Python code
+        id: ruff-lint
         run: ruff check src tests scripts
 
-      - name: Check formatting
+      - name: Verify formatting (without modifying files)
+        if: ${{ !cancelled() && steps.ruff-lint.outcome != 'skipped' }}
         run: ruff format --check src tests scripts
 
   semgrep:
@@ -107,26 +111,39 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     container:
-      image: semgrep/semgrep
+      image: semgrep/semgrep:1.181.0
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
-      - name: Scan for high-severity static-analysis findings
-        run: semgrep scan --config auto --severity ERROR --error VectorDB_Migration_Agent
+      - name: Scan for security and correctness issues
+        # Auto config combines Semgrep's maintained rules with rules inferred for this codebase.
+        # ERROR is a blocking gate; MEDIUM/HIGH findings are retained as JSON for review.
+        run: |
+          semgrep scan --config auto --json --output semgrep-results.json VectorDB_Migration_Agent
+          semgrep scan --config auto --severity ERROR --error VectorDB_Migration_Agent
+
+      - name: Upload Semgrep report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: semgrep-sast-report
+          path: semgrep-results.json
+          if-no-files-found: ignore
+          retention-days: 14
 
   secret-scan:
     name: Gitleaks secret scanning
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout full history
-        uses: actions/checkout@v7
+      - name: Check out full history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
 
-      - name: Scan for leaked secrets
-        uses: gitleaks/gitleaks-action@v3
+      - name: Scan repository history for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_COMMENTS: "false"
