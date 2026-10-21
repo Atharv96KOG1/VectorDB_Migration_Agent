@@ -8,7 +8,7 @@ requires-python = ">=3.12.10,<3.14"
 
 
 dependencies = [
-    "aetherion-sdk @ https://sdk.sbox.aetherion.io/Darwin/aetherion_sdk-0.0.77-cp312-cp312-macosx_26_0_arm64.whl",
+    "aetherion-sdk @ https://sdk.sbox.aetherion.io/Darwin/aetherion_sdk-0.0.116-cp312-cp312-macosx_26_0_arm64.whl",
     "numpy>=2.0",
     "scipy>=1.14",
     "scikit-learn>=1.5",
