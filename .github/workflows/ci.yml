@@ -73,7 +73,7 @@ jobs:
             "numpy>=2.0" "scipy>=1.14" "scikit-learn>=1.5" \
             "qdrant-client>=1.19" "httpx>=0.27" \
             "pydantic>=2.9" "pydantic-settings>=2.6" \
-            "pytest==8.4.2" "pytest-asyncio==1.3.0" "pytest-cov==6.3.0"
+            "pytest==9.0.3" "pytest-asyncio==1.3.0" "pytest-cov==6.3.0"
 
       - name: Run unit tests with coverage
         run: |
