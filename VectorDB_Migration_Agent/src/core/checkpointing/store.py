@@ -83,3 +83,12 @@ def write_artifact(directory: Path, filename: str, data: dict) -> str:
     path = directory / filename
     path.write_text(json.dumps(data, indent=2, default=str))
     return str(path)
+
+
+def write_text_artifact(directory: Path, filename: str, text: str) -> str:
+    """Same contract as write_artifact but for plain text (the Markdown schema/semantic
+    report) — no JSON encoding, written verbatim."""
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / filename
+    path.write_text(text)
+    return str(path)

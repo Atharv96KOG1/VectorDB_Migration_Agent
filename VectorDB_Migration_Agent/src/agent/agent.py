@@ -144,17 +144,34 @@ async def VectorDB_Migration_Agent(payload: dict) -> dict:
             state = MigrationState.COMPLETE
 
         report = await _run("write_provenance_and_report", migration_id)
-        return _result(
+        result = _result(
             migration_id,
             MigrationState.COMPLETE,
             "success",
             "migration completed",
             provenance_ref=report["provenance_ref"],
             report_ref=report["report_ref"],
+            markdown_report_ref=report["markdown_report_ref"],
             quality_gate_passed=report["quality_gate_passed"],
             confidence_score=report["confidence_score"],
             report=report["report"],
+            markdown_report=report["markdown_report"],
         )
+        # Platform download-link convention, as given. Honest caveat (see
+        # WorkflowResult.structured_results' docstring): file_key is a local path, not a
+        # real S3 key — aetherion_sdk has no upload API in this version — so this may not
+        # resolve on the platform. markdown_report above is the guaranteed-visible copy.
+        report_key = report["markdown_report_ref"]
+        result["structured_results"] = [
+            {
+                "type": "s3_download_link",
+                "title": f"Migration Schema Report — {migration_id}",
+                "file_key": report_key,
+                "label": "Download Schema/Semantic Report (Markdown)",
+                "extension": "md",
+            }
+        ]
+        return result
 
     except Exception as exc:  # noqa: BLE001 — top-level workflow guard, routes to FAILED
         return await _enter_failed(migration_id, str(exc))

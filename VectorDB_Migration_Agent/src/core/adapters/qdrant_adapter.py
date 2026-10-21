@@ -52,6 +52,31 @@ _DISTANCE_TO_METRIC = {
 }
 
 
+def _describe_exception(exc: BaseException) -> str:
+    """qdrant_client wraps real connection errors as `ResponseHandlingException(e)`
+    without `raise ... from e` — the real cause isn't reachable via `__cause__`, it's the
+    constructor's own first positional arg, and confirmed live, 2026-10-05, that
+    exception's own str() can itself be empty (a TLS handshake actively reset by a
+    paused/suspended Qdrant Cloud cluster produced a ResponseHandlingException whose
+    str() was simply ''). Walks both __cause__ and this wrapped-exception-as-constructor-
+    arg shape, returning the first message found that actually says something."""
+    node: BaseException | None = exc
+    seen: set[int] = set()
+    while node is not None and id(node) not in seen:
+        seen.add(id(node))
+        message = str(node)
+        if message:
+            return f"{type(node).__name__}: {message}"
+        if node.__cause__ is not None:
+            node = node.__cause__
+            continue
+        if node.args and isinstance(node.args[0], BaseException):
+            node = node.args[0]
+            continue
+        break
+    return f"{type(exc).__name__} (no further detail available)"
+
+
 def _namespace_filter(namespace: str | None) -> models.Filter | None:
     if namespace is None:
         return None
@@ -124,8 +149,10 @@ class QdrantAdapter(VectorDBAdapter):
     async def validate_credentials(self) -> bool:
         try:
             await self._client.get_collections()
+            self.last_connect_error = None
             return True
-        except Exception:
+        except Exception as exc:
+            self.last_connect_error = _describe_exception(exc)
             return False
 
     async def discover_capabilities(self) -> CapabilityReport:

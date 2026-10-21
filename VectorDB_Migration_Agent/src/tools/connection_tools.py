@@ -26,9 +26,18 @@ async def connect_and_validate(migration_id: str) -> dict:
         )
         try:
             connected = await adapter.validate_credentials()
+            error = adapter.last_connect_error
         finally:
             await adapter.close()
         result[side] = {"provider": provider, "connected": connected}
+        if not connected:
+            # Every adapter's validate_credentials previously swallowed the real
+            # exception into a bare False — confirmed live, 2026-10-05: a Qdrant
+            # source whose cluster was actively resetting the TLS handshake (a
+            # paused/suspended cluster) showed nothing beyond "connected: false",
+            # no way to distinguish that from a bad credential or wrong URL without
+            # a developer manually reproducing it outside the platform.
+            result[side]["error"] = error
 
     checkpoint["connection"] = result
     checkpoint["history"].append({"state": "CONNECT", "detail": result})
