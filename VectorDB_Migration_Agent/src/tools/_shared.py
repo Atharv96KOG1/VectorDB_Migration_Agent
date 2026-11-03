@@ -9,8 +9,13 @@ from __future__ import annotations
 import os
 
 from core.adapters.base import VectorDBAdapter
+from core.adapters.chroma_adapter import ChromaAdapter
+from core.adapters.faiss_adapter import FaissAdapter
+from core.adapters.milvus_adapter import MilvusAdapter
 from core.adapters.pinecone_adapter import PineconeAdapter
 from core.adapters.qdrant_adapter import QdrantAdapter
+from core.adapters.vespa_adapter import VespaAdapter
+from core.adapters.weaviate_adapter import WeaviateAdapter
 
 
 class CredentialResolutionError(RuntimeError):
@@ -79,4 +84,44 @@ def build_adapter(provider: str, credential_ref: str, endpoint_ref: str | None) 
         api_key = resolve_secret_ref(credential_ref)
         return PineconeAdapter(api_key=api_key, index_host=endpoint)
 
-    raise ValueError(f"unknown provider: {provider!r} (supported: pinecone, qdrant)")
+    if provider == "milvus":
+        try:
+            token = resolve_secret_ref(credential_ref)
+        except CredentialResolutionError:
+            token = None  # self-hosted Milvus with auth disabled needs no token
+        return MilvusAdapter(uri=endpoint or "http://localhost:19530", token=token)
+
+    if provider == "chroma":
+        try:
+            api_key = resolve_secret_ref(credential_ref)
+        except CredentialResolutionError:
+            api_key = None  # local/self-hosted Chroma without auth needs no key
+        return ChromaAdapter(endpoint=endpoint, credential_ref=api_key)
+
+    if provider == "weaviate":
+        try:
+            api_key = resolve_secret_ref(credential_ref)
+        except CredentialResolutionError:
+            api_key = None  # local/self-hosted Weaviate without auth needs no key
+        return WeaviateAdapter(endpoint=endpoint, credential_ref=api_key)
+
+    if provider == "faiss":
+        if not endpoint:
+            raise CredentialResolutionError(
+                "faiss requires *_endpoint_ref to be a local .faiss index file path"
+            )
+        return FaissAdapter(path=endpoint)  # credential_ref is required by the schema, unused here
+
+    if provider == "vespa":
+        if not endpoint:
+            raise CredentialResolutionError("vespa requires *_endpoint_ref to be its base URL")
+        try:
+            token = resolve_secret_ref(credential_ref)
+        except CredentialResolutionError:
+            token = None  # a Vespa deployment without token/API-key auth needs no token
+        return VespaAdapter(endpoint=endpoint, credential_ref=token)
+
+    raise ValueError(
+        f"unknown provider: {provider!r} (supported: pinecone, qdrant, milvus, chroma, "
+        f"weaviate, faiss, vespa)"
+    )

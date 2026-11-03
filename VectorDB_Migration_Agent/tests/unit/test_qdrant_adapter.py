@@ -14,6 +14,29 @@ from core.adapters.base import VectorRecord
 from core.adapters.qdrant_adapter import QdrantAdapter, _is_qdrant_native_id, _to_qdrant_point_id
 
 
+async def test_validate_credentials_surfaces_a_real_reason_on_failure():
+    """Regression test for a real gap found live, 2026-10-05: validate_credentials
+    swallowed every exception into a bare False — a real Qdrant Cloud cluster whose TLS
+    handshake was being actively reset (a paused/suspended cluster) showed the operator
+    nothing beyond "connected: false" in connect_and_validate's result, no way to tell
+    network failure from a bad credential without a developer manually reproducing it
+    outside the platform."""
+    adapter = QdrantAdapter(url="https://this-host-does-not-resolve.invalid", api_key="x")
+    connected = await adapter.validate_credentials()
+    assert connected is False
+    assert adapter.last_connect_error is not None
+    assert adapter.last_connect_error != ""
+    await adapter.close()
+
+
+async def test_validate_credentials_clears_the_error_on_success():
+    adapter = QdrantAdapter(location=":memory:")
+    connected = await adapter.validate_credentials()
+    assert connected is True
+    assert adapter.last_connect_error is None
+    await adapter.close()
+
+
 def test_native_ids_pass_through_unmapped():
     assert _is_qdrant_native_id("12345") is True
     assert _is_qdrant_native_id("550e8400-e29b-41d4-a716-446655440000") is True

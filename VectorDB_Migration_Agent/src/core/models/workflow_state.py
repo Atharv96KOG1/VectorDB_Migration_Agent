@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class MigrationState(str, Enum):
@@ -90,6 +90,31 @@ class MigrationRequest(BaseModel):
     tools/execution_tools.py) — without it those strategies are correctly marked
     IMPOSSIBLE at PLAN time, never silently attempted."""
 
+    @field_validator(
+        "source_resource",
+        "target_resource",
+        "source_credential_ref",
+        "target_credential_ref",
+        "source_endpoint_ref",
+        "target_endpoint_ref",
+        "namespace",
+        "document_field",
+        mode="before",
+    )
+    @classmethod
+    def _strip_free_text_fields(cls, value: str | None) -> str | None:
+        """Every one of these is a free-text trigger field on the Aetherion platform
+        (not a constrained dropdown), same as source_provider/target_provider already
+        handled in tools/_shared.py:build_adapter — confirmed live, 2026-09-17: a
+        leading space in a real target_resource value ("` Migrationdemo`", from a
+        copy-paste or an accidental space before typing) reached Milvus verbatim and was
+        rejected outright ("the first character of a collection name must be an
+        underscore or letter"). Stripped once here, at the one place every one of these
+        fields is validated, rather than patched per-provider as each one is discovered —
+        the same class of bug as the provider-name one, just never generalized to the
+        rest of these fields until now."""
+        return value.strip() if isinstance(value, str) else value
+
     reembed_model: str = "text-embedding-3-small"
     reembed_dimensions: int | None = None
     """Passed to tools/_transform_factory.py:_resolve_reembed_dimensions — an explicit
@@ -129,9 +154,22 @@ class WorkflowResult(BaseModel):
     summary: str = ""
     provenance_ref: str | None = None
     report_ref: str | None = None
+    markdown_report_ref: str | None = None
     quality_gate_passed: bool | None = None
     confidence_score: float | None = None
     report: dict | None = None
+    markdown_report: str | None = None
+    """Human-readable Markdown schema/semantic comparison (source vs target: vector kind,
+    embedding model/version, semantic space, dimension, data type, normalization, metric,
+    metadata schema, capability discovery, compatibility classification) — returned as
+    text, not just markdown_report_ref's local path, for the same reason `report` is
+    returned inline (no artifact/download API in aetherion_sdk)."""
+    structured_results: list[dict] | None = None
+    """Platform download-link convention (type: s3_download_link) an operator asked to
+    have wired in. Honest caveat: aetherion_sdk has no real upload/S3 API in this
+    version — file_key here is a local filesystem path, not a real object key, so the
+    platform's download UI may not resolve it. `markdown_report` above is the actual
+    content, guaranteed visible regardless of whether this resolves."""
     """The full audit report content, inline — same rationale as provenance above. There
     is no download/preview mechanism in aetherion_sdk for report_ref's local path, so the
     content itself is returned directly so it's visible in the platform's Result panel."""

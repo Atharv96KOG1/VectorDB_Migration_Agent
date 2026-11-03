@@ -102,8 +102,13 @@ class PineconeAdapter(VectorDBAdapter):
     async def validate_credentials(self) -> bool:
         try:
             resp = await self._control.get("/indexes")
-            return resp.status_code == 200
-        except httpx.HTTPError:
+            if resp.status_code == 200:
+                self.last_connect_error = None
+                return True
+            self.last_connect_error = f"HTTP {resp.status_code}: {resp.text[:200]}"
+            return False
+        except httpx.HTTPError as exc:
+            self.last_connect_error = f"{type(exc).__name__}: {exc}"
             return False
 
     async def discover_capabilities(self) -> CapabilityReport:

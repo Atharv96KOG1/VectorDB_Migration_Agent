@@ -19,6 +19,7 @@ from core.models.canonical_ir import (
 )
 from core.models.capability import Capability
 from core.models.migration_plan import CandidateStatus, TransformCandidate, TransformStrategy
+from core.optimizer.cost import StorageCostEstimator
 from tools.benchmark_tools import _brute_force_topk, _evaluate_candidate
 
 
@@ -92,10 +93,15 @@ async def test_evaluate_candidate_falls_back_to_brute_force_without_a_qdrant_ada
         reembed_dimensions=None,
         qdrant_target_adapter=None,
         qdrant_lock=None,
+        target_provider="qdrant",
+        target_vector_count=1000,
     )
 
     assert result.notes == "brute-force exact search"
     assert result.recall_at_10 == 1.0  # direct copy of a query vector must rank itself #1
+    assert result.estimated_cost == StorageCostEstimator().estimate(
+        provider="qdrant", dimension=8, datatype=DataType.FLOAT32, vector_count=1000
+    )
     assert result.strategy == "direct_copy"
 
 
@@ -148,11 +154,14 @@ async def test_evaluate_candidate_isolates_a_real_runtime_error_instead_of_raisi
         reembed_dimensions=None,
         qdrant_target_adapter=None,
         qdrant_lock=None,
+        target_provider="qdrant",
+        target_vector_count=1000,
     )
 
     assert result.passed_quality_gate is False
     assert result.notes == "error during evaluation"
     assert result.gate_reasons and "ValueError" in result.gate_reasons[0]
+    assert result.estimated_cost is None  # never fabricate a cost for a failed candidate
 
 
 async def test_evaluate_candidate_rejects_nan_output_before_any_retrieval_query():
@@ -204,11 +213,14 @@ async def test_evaluate_candidate_rejects_nan_output_before_any_retrieval_query(
         reembed_dimensions=None,
         qdrant_target_adapter=None,
         qdrant_lock=None,
+        target_provider="qdrant",
+        target_vector_count=1000,
     )
 
     assert result.passed_quality_gate is False
     assert result.notes == "fidelity check failed: NaN/Inf in transformed output"
     assert result.gate_reasons and "has_nan=True" in result.gate_reasons[0]
+    assert result.estimated_cost is None  # never fabricate a cost for unusable output
 
 
 async def test_pca_result_carries_reconstruction_diagnostics_but_random_projection_does_not():
@@ -255,6 +267,8 @@ async def test_pca_result_carries_reconstruction_diagnostics_but_random_projecti
         reembed_dimensions=None,
         qdrant_target_adapter=None,
         qdrant_lock=None,
+        target_provider="qdrant",
+        target_vector_count=1000,
     )
 
     pca_result = await _evaluate_candidate(

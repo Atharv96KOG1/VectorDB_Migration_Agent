@@ -40,6 +40,7 @@ from core.compatibility.engine import CompatibilityReport
 from core.models.benchmark import BenchmarkResult
 from core.models.canonical_ir import CanonicalVectorIR
 from core.models.migration_plan import CandidateStatus, MigrationPlan, TransformCandidate
+from core.optimizer.cost import StorageCostEstimator
 from core.transformations.base import TransformContext
 from core.transformations.dequantize import dequantize
 from core.transformations.pca import PCATransformer
@@ -58,6 +59,8 @@ _UPSERT_CHUNK = 500
 # data loss (confirmed live, 2026-09-01: direct_copy, a byte-identical copy, still scored
 # recall@10=0.895 with the default).
 _BENCHMARK_HNSW_EF = 256
+
+_cost_estimator = StorageCostEstimator()
 
 
 def _brute_force_topk(
@@ -88,11 +91,20 @@ async def _fetch_source_topk(
     query_vectors: np.ndarray,
 ) -> dict[str, list[str]]:
     semaphore = asyncio.Semaphore(_SOURCE_QUERY_CONCURRENCY)
+    # Same ANN-approximation fix _qdrant_temp_collection_topk already applies to the
+    # ephemeral TARGET-side query, now applied to the SOURCE-side one too — a real,
+    # persistent Qdrant source collection is queried with Qdrant's default search-time
+    # `ef` exactly like the ephemeral one is, and is exactly as susceptible to the same
+    # approximate-search noise. Confirmed live, 2026-09-11: a byte-identical `direct_copy`
+    # candidate against a real 900-point Qdrant source scored recall@10=0.4725 with the
+    # default ef — a pure artifact of comparing every candidate against the SOURCE's own
+    # imperfect ANN ranking, not a real transform-fidelity or migration-correctness issue.
+    qdrant_kwargs = {"hnsw_ef": _BENCHMARK_HNSW_EF} if isinstance(source_adapter, QdrantAdapter) else {}
 
     async def _one(qid: str, qvec: np.ndarray) -> tuple[str, list[str]]:
         async with semaphore:
             matches = await source_adapter.query(
-                resource, qvec.tolist(), TOP_K, namespace=namespace
+                resource, qvec.tolist(), TOP_K, namespace=namespace, **qdrant_kwargs
             )
             return qid, [m.id for m in matches]
 
@@ -174,6 +186,8 @@ async def _evaluate_candidate(
     reembed_dimensions: int | None,
     qdrant_target_adapter: QdrantAdapter | None,
     qdrant_lock: asyncio.Lock | None,
+    target_provider: str,
+    target_vector_count: int | None,
 ) -> BenchmarkResult:
     strategy = candidate.strategy
     benchmark_id = f"{migration_id}-{strategy.value}-{uuid.uuid4().hex[:8]}"
@@ -300,6 +314,19 @@ async def _evaluate_candidate(
         maximum_topk_overlap_drop=maximum_topk_overlap_drop,
     )
 
+    # Storage-only estimate (core/optimizer/cost.py) using the ACTUAL transformed
+    # dimension (transformed_corpus.shape[1]) rather than field.target.dimension, since a
+    # stub or a not-yet-wired strategy could in principle diverge from the planned
+    # dimension. None (not 0.0) when vector_count or the provider's pricing is unknown —
+    # scorer.py's cost_weight treating a missing estimate as free is a pre-existing,
+    # separately-tracked gap, not something to paper over here.
+    estimated_cost = _cost_estimator.estimate(
+        provider=target_provider,
+        dimension=transformed_corpus.shape[1],
+        datatype=field.target.datatype,
+        vector_count=target_vector_count,
+    )
+
     return BenchmarkResult(
         benchmark_id=benchmark_id,
         migration_id=migration_id,
@@ -310,6 +337,7 @@ async def _evaluate_candidate(
         topk_overlap=metrics["topk_overlap"],
         mrr=metrics["mrr"],
         rank_correlation=metrics["rank_correlation"],
+        estimated_cost=estimated_cost,
         latency_ms_p95=elapsed_ms,
         reconstruction_l2_error=reconstruction_l2_error,
         reconstruction_cosine_similarity=reconstruction_cosine_similarity,
@@ -368,6 +396,16 @@ async def run_benchmarks(migration_id: str) -> dict:
     use_real_ann = req["target_provider"] == "qdrant"
     candidates_to_run = [c for c in plan.candidates if c.status == CandidateStatus.POSSIBLE]
 
+    # Full dataset size, not the DRY_RUN sample size — the cost estimate is meant to
+    # project the real migration's storage footprint, not the cost of the benchmark
+    # itself. Source side, not target: the target may still be empty pre-migration, and
+    # source's approximate_count is what will actually get written. None (discovery
+    # couldn't determine it) flows straight through as an honestly-unestimable cost
+    # rather than silently costing the benchmark sample's size instead.
+    source_vector_count = checkpoint["discovery"]["source"]["resource_info"].get(
+        "approximate_count"
+    )
+
     # One shared connection + lock for every candidate's temp-collection lifecycle — see
     # _qdrant_temp_collection_topk's docstring for why this must not be one-adapter-per-candidate.
     qdrant_target_adapter: QdrantAdapter | None = None
@@ -407,6 +445,8 @@ async def run_benchmarks(migration_id: str) -> dict:
                     reembed_dimensions=reembed_dimensions,
                     qdrant_target_adapter=qdrant_target_adapter,
                     qdrant_lock=qdrant_lock,
+                    target_provider=req["target_provider"],
+                    target_vector_count=source_vector_count,
                 )
 
         results: list[BenchmarkResult] = await asyncio.gather(

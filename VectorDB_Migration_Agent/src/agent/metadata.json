@@ -15,56 +15,56 @@
                 "name": "source_provider",
                 "type": "str",
                 "required": true,
-                "description": "Source vector database provider. Type exactly: pinecone or qdrant",
+                "description": "Source vector database provider. Type exactly: pinecone, qdrant, milvus, chroma, weaviate, faiss, or vespa",
                 "friendly_name": "Source Provider"
             },
             {
                 "name": "source_resource",
                 "type": "str",
                 "required": true,
-                "description": "Source index/collection name.",
+                "description": "Source index/collection name. For vespa: '<namespace>/<document-type>' (Vespa has no simple index name). For faiss: any placeholder value works — the real identity is source_endpoint_ref's file path.",
                 "friendly_name": "Source Resource"
             },
             {
                 "name": "source_credential_ref",
                 "type": "str",
                 "required": true,
-                "description": "Your real Pinecone/Qdrant API key, pasted directly (works immediately, no setup). Also accepts an environment variable name (e.g. PINECONE_API_KEY) if the worker already has one set.",
+                "description": "Your real API key/token, pasted directly (works immediately, no setup): PINECONE_API_KEY, QDRANT_API_KEY, MILVUS_TOKEN (Zilliz Cloud), CHROMA_API_KEY (Chroma Cloud), or WEAVIATE_API_KEY. Also accepts an environment variable name if the worker already has one set. Self-hosted milvus/chroma/weaviate without auth, and faiss (no server/credentials at all), still require a value here but it's ignored — pass any placeholder.",
                 "friendly_name": "Source Credential Ref"
             },
             {
                 "name": "source_endpoint_ref",
                 "type": "str",
                 "required": false,
-                "description": "Optional endpoint/host — a literal URL, 'memory' for a local Qdrant instance, or an environment variable name if the worker already has one set.",
+                "description": "Endpoint/host — a literal URL, 'memory' for a local Qdrant/Chroma/Weaviate instance, or an environment variable name if the worker already has one set. For milvus: cluster URI (e.g. https://in03-xxxx....cloud.zilliz.com). For chroma: 'cloud://<tenant>/<database>' for Chroma Cloud, 'path://<dir>' for local persistent. For weaviate: cluster URL (Weaviate Cloud) or host:port. For faiss: REQUIRED — local filesystem path to the .faiss index file. For vespa: REQUIRED — the base URL of the Vespa endpoint.",
                 "friendly_name": "Source Endpoint Ref"
             },
             {
                 "name": "target_provider",
                 "type": "str",
                 "required": true,
-                "description": "Target vector database provider. Type exactly: pinecone or qdrant",
+                "description": "Target vector database provider. Type exactly: pinecone, qdrant, milvus, chroma, weaviate, faiss, or vespa",
                 "friendly_name": "Target Provider"
             },
             {
                 "name": "target_resource",
                 "type": "str",
                 "required": true,
-                "description": "Target index/collection name.",
+                "description": "Target index/collection name. For vespa: '<namespace>/<document-type>' (Vespa has no simple index name). For faiss: any placeholder value works — the real identity is target_endpoint_ref's file path.",
                 "friendly_name": "Target Resource"
             },
             {
                 "name": "target_credential_ref",
                 "type": "str",
                 "required": true,
-                "description": "Your real target provider API key, pasted directly (works immediately, no setup). Also accepts an environment variable name (e.g. QDRANT_API_KEY) if the worker already has one set.",
+                "description": "Your real target provider API key/token, pasted directly (works immediately, no setup). Also accepts an environment variable name if the worker already has one set. See source_credential_ref for per-provider env var names and the faiss/self-hosted-without-auth placeholder note.",
                 "friendly_name": "Target Credential Ref"
             },
             {
                 "name": "target_endpoint_ref",
                 "type": "str",
                 "required": false,
-                "description": "Optional endpoint/host for the target provider — a literal URL, or an environment variable name if the worker already has one set.",
+                "description": "Endpoint/host for the target provider — see source_endpoint_ref for the per-provider format. REQUIRED for faiss (local index file path) and vespa (base URL).",
                 "friendly_name": "Target Endpoint Ref"
             },
             {
